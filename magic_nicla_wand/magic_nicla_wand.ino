@@ -10,8 +10,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <ArduinoBLE.h>
-#include <Arduino_LSM9DS1.h>
+// #include <ArduinoBLE.h>
+// #include <Arduino_LSM9DS1.h>
+#include <Arduino_LSM6DSOX.h>
+// #include "VL53L1X.h"
+// #include <stdarg.h>
+
 #include <TensorFlowLite.h>
 
 #include <cmath>
@@ -24,7 +28,15 @@ limitations under the License.
 #include "tensorflow/lite/micro/system_setup.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 
-#define BLE_SENSE_UUID(val) ("4798e0f2-" val "-4d68-af64-8a8f5258404e")
+
+// #include "edge-impulse-sdk/tensorflow/lite/micro/micro_interpreter.h"
+// #include "edge-impulse-sdk/tensorflow/lite/micro/micro_log.h"
+// #include "edge-impulse-sdk/tensorflow/lite/micro/micro_mutable_op_resolver.h"
+// #include "edge-impulse-sdk/tensorflow/lite/micro/system_setup.h"
+// #include "edge-impulse-sdk/tensorflow/lite/schema/schema_generated.h"
+
+
+// #define BLE_SENSE_UUID(val) ("4798e0f2-" val "-4d68-af64-8a8f5258404e")
 
 #undef MAGIC_WAND_DEBUG
 
@@ -49,9 +61,9 @@ constexpr int raster_byte_count =
     raster_height * raster_width * raster_channels;
 int8_t raster_buffer[raster_byte_count];
 
-BLEService service(BLE_SENSE_UUID("0000"));
-BLECharacteristic strokeCharacteristic(BLE_SENSE_UUID("300a"), BLERead,
-                                       stroke_struct_byte_count);
+// BLEService service(BLE_SENSE_UUID("0000"));
+// BLECharacteristic strokeCharacteristic(BLE_SENSE_UUID("300a"), BLERead,
+//                                        stroke_struct_byte_count);
 
 // String to calculate the local and device name
 String name;
@@ -101,15 +113,15 @@ alignas(16) uint8_t tensor_arena[kTensorArenaSize];
 const tflite::Model* model = nullptr;
 tflite::MicroInterpreter* interpreter = nullptr;
 
-constexpr int label_count = 10;
-const char* labels[label_count] = {"0", "1", "2", "3", "4",
-                                   "5", "6", "7", "8", "9"};
+constexpr int label_count = 2;
+const char* labels[label_count] = {"0", "1"};
 
 void SetupIMU() {
   // Make sure we are pulling measurements into a FIFO.
   // If you see an error on this line, make sure you have at least v1.1.0 of the
   // Arduino_LSM9DS1 library installed.
-  IMU.setContinuousMode();
+  // IMU.setContinuousMode();
+  IMU.begin();
 
   acceleration_sample_rate = IMU.accelerationSampleRate();
   gyroscope_sample_rate = IMU.gyroscopeSampleRate();
@@ -518,36 +530,36 @@ void setup() {
 
   SetupIMU();
 
-  if (!BLE.begin()) {
-    MicroPrintf("Failed to initialized BLE!");
-    while (true) {
-      // NORETURN
-    }
-  }
+  // if (!BLE.begin()) {
+  //   MicroPrintf("Failed to initialized BLE!");
+  //   while (true) {
+  //     // NORETURN
+  //   }
+  // }
 
-  String address = BLE.address();
+  // String address = BLE.address();
 
-  MicroPrintf("address = %s", address.c_str());
+  // MicroPrintf("address = %s", address.c_str());
 
-  address.toUpperCase();
+  // address.toUpperCase();
 
-  name = "BLESense-";
-  name += address[address.length() - 5];
-  name += address[address.length() - 4];
-  name += address[address.length() - 2];
-  name += address[address.length() - 1];
+  // name = "BLESense-";
+  // name += address[address.length() - 5];
+  // name += address[address.length() - 4];
+  // name += address[address.length() - 2];
+  // name += address[address.length() - 1];
 
-  MicroPrintf("name = %s", name.c_str());
+  // MicroPrintf("name = %s", name.c_str());
 
-  BLE.setLocalName(name.c_str());
-  BLE.setDeviceName(name.c_str());
-  BLE.setAdvertisedService(service);
+  // BLE.setLocalName(name.c_str());
+  // BLE.setDeviceName(name.c_str());
+  // BLE.setAdvertisedService(service);
 
-  service.addCharacteristic(strokeCharacteristic);
+  // service.addCharacteristic(strokeCharacteristic);
 
-  BLE.addService(service);
+  // BLE.addService(service);
 
-  BLE.advertise();
+  // BLE.advertise();
 
   // Map the model into a usable data structure. This doesn't involve any
   // copying or parsing, it's a very lightweight operation.
@@ -577,6 +589,7 @@ void setup() {
   interpreter = &static_interpreter;
 
   // Allocate memory from the tensor_arena for the model's tensors.
+  // interpreter->AllocateTensors(true);
   interpreter->AllocateTensors();
 
   TfLiteTensor* model_input = interpreter->input(0);
@@ -601,15 +614,15 @@ void setup() {
 }
 
 void loop() {
-  BLEDevice central = BLE.central();
+  // BLEDevice central = BLE.central();
 
   // if a central is connected to the peripheral:
-  static bool was_connected_last = false;
-  if (central && !was_connected_last) {
-    // print the central's BT address:
-    MicroPrintf("Connected to central: %s", central.address().c_str());
-  }
-  was_connected_last = central;
+  // static bool was_connected_last = false;
+  // if (central && !was_connected_last) {
+  //   // print the central's BT address:
+  //   MicroPrintf("Connected to central: %s", central.address().c_str());
+  // }
+  // was_connected_last = central;
 
   const bool data_available =
       IMU.accelerationAvailable() || IMU.gyroscopeAvailable();
@@ -628,10 +641,10 @@ void loop() {
     UpdateOrientation(gyroscope_samples_read, current_gravity,
                       current_gyroscope_drift);
     UpdateStroke(gyroscope_samples_read, &done_just_triggered);
-    if (central && central.connected()) {
-      strokeCharacteristic.writeValue(stroke_struct_buffer,
-                                      stroke_struct_byte_count);
-    }
+    // if (central && central.connected()) {
+    //   strokeCharacteristic.writeValue(stroke_struct_buffer,
+    //                                   stroke_struct_byte_count);
+    // }
   }
 
   if (accelerometer_samples_read > 0) {
